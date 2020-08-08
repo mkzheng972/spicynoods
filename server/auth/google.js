@@ -1,7 +1,7 @@
 const passport = require('passport')
 const router = require('express').Router()
 const GoogleStrategy = require('passport-google-oauth').OAuth2Strategy
-const {User} = require('../db/models')
+const {User, Order} = require('../db/models')
 module.exports = router
 
 /**
@@ -29,20 +29,26 @@ if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
 
   const strategy = new GoogleStrategy(
     googleConfig,
-    (token, refreshToken, profile, done) => {
-      const googleId = profile.id
-      const email = profile.emails[0].value
-      const imgUrl = profile.photos[0].value
-      const firstName = profile.name.givenName
-      const lastName = profile.name.familyName
-      const fullName = profile.displayName
+    async (token, refreshToken, profile, done) => {
+      try {
+        const googleId = profile.id
+        const email = profile.emails[0].value
+        const imgUrl = profile.photos[0].value
+        const firstName = profile.name.givenName
+        const lastName = profile.name.familyName
 
-      User.findOrCreate({
-        where: {googleId},
-        defaults: {email, imgUrl, firstName, lastName, fullName}
-      })
-        .then(([user]) => done(null, user))
-        .catch(done)
+        const [instance, wasCreated] = await User.findOrCreate({
+          where: {googleId},
+          defaults: {email, imgUrl, firstName, lastName}
+        })
+        if (wasCreated) {
+          const order = await Order.create()
+          instance.addOrder(order)
+        }
+        done(null, instance)
+      } catch (error) {
+        done(error)
+      }
     }
   )
 
